@@ -33,7 +33,7 @@
 
 // ZED includes
 #include <sl/Camera.hpp>
-
+#include "csvFile.hpp"
 
 // OpenCV includes
 #include "opencv2/opencv.hpp"
@@ -50,6 +50,7 @@ namespace fs = std::experimental::filesystem;
 
 // Create ZED objects
 sl::Camera zed;
+sl::IMUData imu_data;
 sl::Pose camera_pose;
 std::thread zed_callback;
 bool quit = false;
@@ -62,6 +63,7 @@ const int MAX_CHAR = 128;
 // Sample functions
 void startZED();
 void run();
+void runMCS();
 void close();
 void transformPose(sl::Transform &pose, float tx);
 cv::Mat slMat2cvMat(Mat& input);
@@ -70,7 +72,7 @@ int main(int argc, char **argv) {
 
 	// Set configuration parameters for the ZED
 	InitParameters initParameters;
-	initParameters.camera_resolution = RESOLUTION_HD720;
+	initParameters.camera_resolution = RESOLUTION::RESOLUTION_HD720;
 	initParameters.depth_mode = DEPTH_MODE_PERFORMANCE;
 	initParameters.coordinate_units = UNIT_METER;
 	initParameters.coordinate_system = COORDINATE_SYSTEM_RIGHT_HANDED_Y_UP;
@@ -86,6 +88,7 @@ int main(int argc, char **argv) {
 		return 1; // Quit if an error occurred
 	}
 
+	
 	// Set positional tracking parameters
 	TrackingParameters trackingParameters;
 	trackingParameters.initial_world_transform = sl::Transform::identity();
@@ -103,6 +106,7 @@ int main(int argc, char **argv) {
 	// Set the display callback
 	glutCloseFunc(close);
 	glutMainLoop();
+	
 
 	return 0;
 }
@@ -131,6 +135,8 @@ void run() {
 	// Create text for GUI
 	char text_rotation[MAX_CHAR];
 	char text_translation[MAX_CHAR];
+	char text_imu_angular_velocity[MAX_CHAR];
+	char text_imu_acc[MAX_CHAR];
 
 	// Create common directory to output collected data. 
 	std::string output_dir = "output/";
@@ -147,12 +153,20 @@ void run() {
 
 	// Create a CSV file to log motion tracking data
 	std::ofstream outputFile;
+	ofstream outputFile_imu;
 	std::string csvName = "Motion_data";
 	outputFile.open(imu_dir + csvName + ".csv");
 	if (!outputFile.is_open())
 		cout << "WARNING: Can't create CSV file. Run the application with administrator rights." << endl;
 	else
 		outputFile << "Timestamp(ns);Rotation_X(rad);Rotation_Y(rad);Rotation_Z(rad);Position_X(m);Position_Y(m);Position_Z(m);" << endl;
+
+
+	if (zed.getCameraInformation().camera_model == MODEL_ZED_M)
+	{
+		
+			outputFile_imu << "#timestamp [ns];w_RS_S_x [rad s^-1];w_RS_S_y [rad s^-1];w_RS_S_z [rad s^-1];a_RS_S_x [m s^-2];a_RS_S_y [m s^-2];a_RS_S_z [m s^-2]" << std::endl;
+	}
 
 	char key = ' ';
 	unsigned int i = 0;
@@ -195,9 +209,30 @@ void run() {
 				if (outputFile.is_open())
 					outputFile << zed.getTimestamp(sl::TIME_REFERENCE::TIME_REFERENCE_IMAGE) << "; " << text_rotation << "; " << text_translation << ";" << endl;
 
-				// Save image data to Disk. 
+				// Save imu raw data 
+				if (zed.getCameraInformation().camera_model == MODEL_ZED_M)
+				{
+					zed.getIMUData(imu_data, sl::TIME_REFERENCE::TIME_REFERENCE_IMAGE);
+					auto time_stamp = imu_data.timestamp;
+					auto linear_acc = imu_data.linear_acceleration;
+					auto angular_vel = imu_data.angular_velocity;
+
+					// write imu data to disk. 
+					snprintf(text_imu_angular_velocity, MAX_CHAR, "%3.2f; %3.2f; %3.2f", angular_vel.x, angular_vel.y, angular_vel.z);
+					snprintf(text_imu_acc, MAX_CHAR, "%3.2f; %3.2f; %3.2f", linear_acc.x, linear_acc.y, linear_acc.z);
+					std::cout << "angular velocity: " << angular_vel.x << ", " << angular_vel.y << ", " << angular_vel.z << '\n';
+					std::cout << "Linear accelration: " << linear_acc.x << ", " << linear_acc.y << ", " << linear_acc.z << '\n';
+					if (outputFile_imu.is_open())
+						outputFile_imu << time_stamp << "; " << text_imu_angular_velocity << "; " << text_imu_acc << ";" << std::endl;
+				}
+
+
+				// Save/show image data to screen/Disk. 
 				cv::imwrite(cam0_dir + "left" + std::to_string(i) + ".jpg", ocv_left_image);
 				cv::imwrite(cam1_dir + "right" + std::to_string(i) + ".jpg", ocv_right_image);
+				cv::imshow("left", ocv_left_image);
+				cv::imshow("right", ocv_right_image);
+				key = cv::waitKey(30);
 				++i;
 			}
 
@@ -264,4 +299,73 @@ cv::Mat slMat2cvMat(Mat& input) {
 	// Since cv::Mat data requires a uchar* pointer, we get the uchar1 pointer from sl::Mat (getPtr<T>())
 	// cv::Mat and sl::Mat will share a single memory structure
 	return cv::Mat(input.getHeight(), input.getWidth(), cv_type, input.getPtr<sl::uchar1>(MEM_CPU));
+}
+
+
+void runMCS(/*const InitParameters& init_parameters*/)
+{
+	// Create common directory to output collected data.
+	std::string output_dir = "output/";
+	std::string cam0_dir = output_dir + "cam0/"; // left cam directory.
+	std::string cam1_dir = output_dir + "cam1/"; // right cam directory.
+	std::string imu_dir = output_dir + "imu/";
+	std::string cam_params_dir = output_dir + "camera_parameters/";
+
+	fs::create_directory(output_dir);
+	fs::create_directory(cam0_dir);
+	fs::create_directory(cam1_dir);
+	fs::create_directory(imu_dir);
+	fs::create_directory(cam_params_dir);
+
+	// reading camera params. 
+	auto camera_params = zed.getCameraInformation().calibration_parameters_raw;
+
+	unsigned int i = 0;
+	char key = ' ';
+	while (key != 'q')
+	{
+		// Capture images from both left and right cameras. 
+		sl::Mat zed_image_left;
+		sl::Mat zed_image_right;
+
+		// retrieve images from zed camera. 
+		zed.retrieveImage(zed_image_left, VIEW_LEFT);
+		zed.retrieveImage(zed_image_right, VIEW_RIGHT);
+
+		// convert images to opencv format. 
+		cv::Mat ocv_left_image = slMat2cvMat(zed_image_left);
+		cv::Mat ocv_right_image = slMat2cvMat(zed_image_right);
+
+		// Read/Save imu raw data 
+		if (zed.getCameraInformation().camera_model == MODEL_ZED_M)
+		{
+			zed.getIMUData(imu_data, sl::TIME_REFERENCE::TIME_REFERENCE_IMAGE);
+			auto time_stamp = imu_data.timestamp;
+			auto linear_acc = imu_data.linear_acceleration;
+			auto angular_vel = imu_data.angular_velocity;
+
+			// write imu data to disk. 
+			std::cout << "angular velocity: " << angular_vel.x << ", " << angular_vel.y << ", " << angular_vel.z << '\n';
+			std::cout << "Linear accelration: " << linear_acc.x << ", " << linear_acc.y << ", " << linear_acc.z << '\n';
+		}
+
+		// Write images to Disk. 
+		cv::imshow("left", ocv_left_image);
+		cv::imshow("right", ocv_right_image);
+		cv::imwrite(cam0_dir + std::to_string(i) + "_left.jpg", ocv_left_image);
+		cv::imwrite(cam1_dir + std::to_string(i) + "_right.jpg", ocv_right_image);
+		++i;
+		cv::waitKey(30);
+	}
+
+	// Write camera parameters data to Disk. 
+	std::ofstream cam_params_left, cam_params_right;
+	cam_params_left.open(cam_params_dir + "left.txt");
+	cam_params_right.open(cam_params_dir + "right.txt");
+	if (cam_params_left.is_open())
+		cam_params_left << camera_params.left_cam.fx << ' ' << camera_params.left_cam.fy <<
+		' ' << camera_params.left_cam.cx << ' ' << camera_params.left_cam.cy << '\n';
+	if (cam_params_right.is_open())
+		cam_params_left << camera_params.right_cam.fx << ' ' << camera_params.right_cam.fy <<
+		' ' << camera_params.right_cam.cx << ' ' << camera_params.right_cam.cy << '\n';
 }
