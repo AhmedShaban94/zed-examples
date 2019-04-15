@@ -154,7 +154,7 @@ void run() {
 
 	// Create a CSV file to log motion tracking data
 	std::ofstream outputFile;
-	csvfile imu_csv(imu_dir + "imu_data.csv", ",");
+	csvfile imu_csv(imu_dir + "imu_data.csv", ",", 9);
 	std::string csvName = "Motion_data";
 	outputFile.open(imu_dir + csvName + ".csv");
 	if (!outputFile.is_open())
