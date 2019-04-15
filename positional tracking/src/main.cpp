@@ -30,6 +30,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <exception>
 
 // ZED includes
 #include <sl/Camera.hpp>
@@ -88,7 +89,7 @@ int main(int argc, char **argv) {
 		return 1; // Quit if an error occurred
 	}
 
-	
+
 	// Set positional tracking parameters
 	TrackingParameters trackingParameters;
 	trackingParameters.initial_world_transform = sl::Transform::identity();
@@ -106,7 +107,7 @@ int main(int argc, char **argv) {
 	// Set the display callback
 	glutCloseFunc(close);
 	glutMainLoop();
-	
+
 
 	return 0;
 }
@@ -153,7 +154,7 @@ void run() {
 
 	// Create a CSV file to log motion tracking data
 	std::ofstream outputFile;
-	ofstream outputFile_imu;
+	csvfile imu_csv(imu_dir + "imu_data.csv", ",");
 	std::string csvName = "Motion_data";
 	outputFile.open(imu_dir + csvName + ".csv");
 	if (!outputFile.is_open())
@@ -164,8 +165,17 @@ void run() {
 
 	if (zed.getCameraInformation().camera_model == MODEL_ZED_M)
 	{
-		
-			outputFile_imu << "#timestamp [ns];w_RS_S_x [rad s^-1];w_RS_S_y [rad s^-1];w_RS_S_z [rad s^-1];a_RS_S_x [m s^-2];a_RS_S_y [m s^-2];a_RS_S_z [m s^-2]" << std::endl;
+		try
+		{
+			// header 
+			imu_csv << "#timestamp[ns]" << "w_RS_S_x[rad s^-1]" << "w_RS_S_y[rad s^-1]" << "w_RS_S_z[rad s^-1]" <<
+				"a_RS_S_x[m s^-2]" << "a_RS_S_y[m s^-2]" << "a_RS_S_z[m s^-2]" << endrow;
+
+		}
+		catch (const std::exception& ex)
+		{
+			std::cout << "exception was thrown " << ex.what() << '\n';
+		}
 	}
 
 	char key = ' ';
@@ -175,7 +185,7 @@ void run() {
 			// Get the position of the camera in a fixed reference frame (the World Frame)
 			TRACKING_STATE tracking_state = zed.getPosition(camera_pose, sl::REFERENCE_FRAME_WORLD);
 
-			if (tracking_state == TRACKING_STATE_OK) {
+			if (/*tracking_state == TRACKING_STATE_OK*/1) {
 				// Capture images from both left and right cameras. 
 				sl::Mat zed_image_left;
 				sl::Mat zed_image_right;
@@ -218,18 +228,17 @@ void run() {
 					auto angular_vel = imu_data.angular_velocity;
 
 					// write imu data to disk. 
-					snprintf(text_imu_angular_velocity, MAX_CHAR, "%3.2f; %3.2f; %3.2f", angular_vel.x, angular_vel.y, angular_vel.z);
-					snprintf(text_imu_acc, MAX_CHAR, "%3.2f; %3.2f; %3.2f", linear_acc.x, linear_acc.y, linear_acc.z);
+					//snprintf(text_imu_angular_velocity, MAX_CHAR, "%3.2f; %3.2f; %3.2f", angular_vel.x, angular_vel.y, angular_vel.z);
+					//snprintf(text_imu_acc, MAX_CHAR, "%3.2f; %3.2f; %3.2f", linear_acc.x, linear_acc.y, linear_acc.z);
 					std::cout << "angular velocity: " << angular_vel.x << ", " << angular_vel.y << ", " << angular_vel.z << '\n';
 					std::cout << "Linear accelration: " << linear_acc.x << ", " << linear_acc.y << ", " << linear_acc.z << '\n';
-					if (outputFile_imu.is_open())
-						outputFile_imu << time_stamp << "; " << text_imu_angular_velocity << "; " << text_imu_acc << ";" << std::endl;
+					imu_csv << time_stamp << angular_vel.x << angular_vel.y << angular_vel.z << linear_acc.x << linear_acc.y << linear_acc.z << endrow;
 				}
 
 
 				// Save/show image data to screen/Disk. 
-				cv::imwrite(cam0_dir + "left" + std::to_string(i) + ".jpg", ocv_left_image);
-				cv::imwrite(cam1_dir + "right" + std::to_string(i) + ".jpg", ocv_right_image);
+				cv::imwrite(cam0_dir + "_left" + std::to_string(i) + ".jpg", ocv_left_image);
+				cv::imwrite(cam1_dir + "_right" + std::to_string(i) + ".jpg", ocv_right_image);
 				cv::imshow("left", ocv_left_image);
 				cv::imshow("right", ocv_right_image);
 				key = cv::waitKey(30);
