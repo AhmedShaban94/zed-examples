@@ -155,12 +155,12 @@ void run() {
 	// Create a CSV file to log motion tracking data
 	std::ofstream outputFile;
 	csvfile imu_csv(imu_dir + "imu_data.csv", ",", 9);
-	std::string csvName = "Motion_data";
-	outputFile.open(imu_dir + csvName + ".csv");
-	if (!outputFile.is_open())
-		cout << "WARNING: Can't create CSV file. Run the application with administrator rights." << endl;
-	else
-		outputFile << "Timestamp(ns);Rotation_X(rad);Rotation_Y(rad);Rotation_Z(rad);Position_X(m);Position_Y(m);Position_Z(m);" << endl;
+	//std::string csvName = "Motion_data";
+	//outputFile.open(imu_dir + csvName + ".csv");
+	//if (!outputFile.is_open())
+	//	cout << "WARNING: Can't create CSV file. Run the application with administrator rights." << endl;
+	//else
+	//	outputFile << "Timestamp(ns);Rotation_X(rad);Rotation_Y(rad);Rotation_Z(rad);Position_X(m);Position_Y(m);Position_Z(m);" << endl;
 
 
 	if (zed.getCameraInformation().camera_model == MODEL_ZED_M)
@@ -179,7 +179,6 @@ void run() {
 	}
 
 	char key = ' ';
-	unsigned int i = 0;
 	while ((!quit && zed.getSVOPosition() != zed.getSVONumberOfFrames() - 1) && key != 'q') {
 		if (zed.grab() == SUCCESS) {
 			// Get the position of the camera in a fixed reference frame (the World Frame)
@@ -216,8 +215,8 @@ void run() {
 				snprintf(text_translation, MAX_CHAR, "%3.2f; %3.2f; %3.2f", translation.x, translation.y, translation.z);
 
 				// Save the pose data in a csv file
-				if (outputFile.is_open())
-					outputFile << zed.getTimestamp(sl::TIME_REFERENCE::TIME_REFERENCE_IMAGE) << "; " << text_rotation << "; " << text_translation << ";" << endl;
+				//if (outputFile.is_open())
+				//	outputFile << zed.getTimestamp(sl::TIME_REFERENCE::TIME_REFERENCE_IMAGE) << "; " << text_rotation << "; " << text_translation << ";" << endl;
 
 				// Save imu raw data 
 				if (zed.getCameraInformation().camera_model == MODEL_ZED_M)
@@ -235,14 +234,12 @@ void run() {
 					imu_csv << time_stamp << angular_vel.x << angular_vel.y << angular_vel.z << linear_acc.x << linear_acc.y << linear_acc.z << endrow;
 				}
 
-
 				// Save/show image data to screen/Disk. 
-				cv::imwrite(cam0_dir + "_left" + std::to_string(i) + ".jpg", ocv_left_image);
-				cv::imwrite(cam1_dir + "_right" + std::to_string(i) + ".jpg", ocv_right_image);
+				cv::imwrite(cam0_dir + std::to_string(zed_image_left.timestamp) + ".png", ocv_left_image);
+				cv::imwrite(cam1_dir + std::to_string(zed_image_right.timestamp) + ".png", ocv_right_image);
 				cv::imshow("left", ocv_left_image);
 				cv::imshow("right", ocv_right_image);
 				key = cv::waitKey(30);
-				++i;
 			}
 
 			// Update rotation, translation and tracking state values in the OpenGL window
