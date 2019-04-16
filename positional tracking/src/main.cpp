@@ -143,18 +143,22 @@ void run() {
 	std::string output_dir = "output/";
 	std::string cam0_dir = output_dir + "cam0/"; // left cam directory.  
 	std::string cam1_dir = output_dir + "cam1/"; // right cam directory.
-	std::string imu_dir = output_dir + "imu/";
-	std::string cam_params_dir = output_dir + "camera_parameters/";
+	std::string imu_dir = output_dir + "imu0/";
+	//std::string cam_params_dir = output_dir + "camera_parameters/";
 
 	fs::create_directory(output_dir);
 	fs::create_directory(cam0_dir);
 	fs::create_directory(cam1_dir);
 	fs::create_directory(imu_dir);
-	fs::create_directory(cam_params_dir);
+	fs::create_directory(cam0_dir + "data/");
+	fs::create_directory(cam1_dir + "data/");
+	//fs::create_directory(cam_params_dir);
 
 	// Create a CSV file to log motion tracking data
 	std::ofstream outputFile;
-	csvfile imu_csv(imu_dir + "imu_data.csv", ",", 9);
+	csvfile imu_csv(imu_dir + "data.csv", ",", 20);
+	csvfile cam0_csv(cam0_dir + "data.csv", ",", 20);
+	csvfile cam1_csv(cam1_dir + "data.csv", ",", 20);
 	//std::string csvName = "Motion_data";
 	//outputFile.open(imu_dir + csvName + ".csv");
 	//if (!outputFile.is_open())
@@ -229,14 +233,16 @@ void run() {
 					// write imu data to disk. 
 					//snprintf(text_imu_angular_velocity, MAX_CHAR, "%3.2f; %3.2f; %3.2f", angular_vel.x, angular_vel.y, angular_vel.z);
 					//snprintf(text_imu_acc, MAX_CHAR, "%3.2f; %3.2f; %3.2f", linear_acc.x, linear_acc.y, linear_acc.z);
-					std::cout << "angular velocity: " << angular_vel.x << ", " << angular_vel.y << ", " << angular_vel.z << '\n';
-					std::cout << "Linear accelration: " << linear_acc.x << ", " << linear_acc.y << ", " << linear_acc.z << '\n';
+					//std::cout << "angular velocity: " << angular_vel.x << ", " << angular_vel.y << ", " << angular_vel.z << '\n';
+					//std::cout << "Linear accelration: " << linear_acc.x << ", " << linear_acc.y << ", " << linear_acc.z << '\n';
 					imu_csv << time_stamp << angular_vel.x << angular_vel.y << angular_vel.z << linear_acc.x << linear_acc.y << linear_acc.z << endrow;
 				}
 
 				// Save/show image data to screen/Disk. 
-				cv::imwrite(cam0_dir + std::to_string(zed_image_left.timestamp) + ".png", ocv_left_image);
-				cv::imwrite(cam1_dir + std::to_string(zed_image_right.timestamp) + ".png", ocv_right_image);
+				cv::imwrite(cam0_dir + "data/" + std::to_string(zed_image_left.timestamp) + ".png", ocv_left_image);
+				cam0_csv << std::to_string(zed_image_left.timestamp) << (std::to_string(zed_image_left.timestamp) + ".png") << endrow;
+				cv::imwrite(cam1_dir + "data/" + std::to_string(zed_image_right.timestamp) + ".png", ocv_right_image);
+				cam1_csv << std::to_string(zed_image_right.timestamp) << (std::to_string(zed_image_right.timestamp) + ".png") << endrow;
 				cv::imshow("left", ocv_left_image);
 				cv::imshow("right", ocv_right_image);
 				key = cv::waitKey(30);
@@ -248,7 +254,8 @@ void run() {
 		else sl::sleep_ms(1);
 	}
 
-	// write camera intrinsic parameters to disk. 
+	/*
+	// write camera intrinsic parameters to disk.
 	std::ofstream cam_params_left(cam_params_dir + "left.txt");
 	std::ofstream cam_params_right(cam_params_dir + "right.txt");
 	auto cam_info = zed.getCameraInformation().calibration_parameters_raw;
@@ -257,9 +264,10 @@ void run() {
 	cam_params_left << cam_info.left_cam.fx << " " << cam_info.left_cam.fy << " "
 		<< cam_info.left_cam.cx << " " << cam_info.left_cam.cy << '\n';
 
-	//output cam_right params 
+	//output cam_right params
 	cam_params_right << cam_info.right_cam.fx << ' ' << cam_info.right_cam.fy << ' '
 		<< cam_info.right_cam.cx << ' ' << cam_info.right_cam.cy << '\n';
+	*/
 }
 
 /**
